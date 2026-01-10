@@ -151,10 +151,43 @@ app = FastAPI(lifespan=lifespan)
 
 # --- CORS (Cross-Origin Resource Sharing) 設定 ---
 # 異なるオリジン（ドメイン、ポート）からのリクエストを許可するための設定です。
-# 開発中は "*" で全て許可し、フロントエンドとバックエンドの通信を容易にします。
+#
+# 設定方法:
+#   1. ローカル開発: 自動で "*" (全許可)
+#   2. Vercel環境: 自動で全デプロイメントを許可 (https://*.vercel.app)
+#   3. 他のプラットフォーム: 環境変数 ALLOWED_ORIGINS を設定
+#      例: ALLOWED_ORIGINS=https://yourdomain.com,https://app.yourdomain.com
+#
+# ALLOWED_ORIGINS環境変数で明示的に指定すると、どの環境でも上書きされます。
+
+allowed_origins_str = os.environ.get("ALLOWED_ORIGINS")
+is_vercel = bool(os.environ.get("VERCEL"))
+
+if allowed_origins_str:
+    # 明示的に指定された場合（全てのプラットフォームで使用可能）
+    allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
+    allow_origin_regex = None
+    print(f"🔐 [CORS] Custom origins: {', '.join(allowed_origins)}")
+elif is_vercel:
+    # Vercel環境では正規表現で全デプロイメントを自動許可
+    # 本番デプロイ + プレビューデプロイを全て許可
+    allowed_origins = []
+    allow_origin_regex = r"https://.*\.vercel\.app"
+    print(f"🔐 [CORS] Vercel mode: allowing all *.vercel.app deployments")
+else:
+    # ローカル開発環境では全許可
+    allowed_origins = ["*"]
+    allow_origin_regex = None
+    # 本番環境の可能性がある場合は警告
+    if os.environ.get("PORT") or os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("RENDER"):
+        print("⚠️  [CORS] Warning: Running in production without ALLOWED_ORIGINS set. Consider setting ALLOWED_ORIGINS environment variable.")
+    else:
+        print(f"🔐 [CORS] Development mode: allowing all origins")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
+    allow_origin_regex=allow_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -269,6 +302,10 @@ async def debug_info():
     環境変数、ファイルパス、ルート情報などを返します。
     この情報はトラブルシューティングに役立ちますが、本番環境では公開すべきではありません。
     """
+    # DEBUG_MODEチェック - 無効の場合は404を返す
+    if not os.environ.get("DEBUG_MODE", "false").lower() == "true":
+        raise HTTPException(status_code=404, detail="Not Found")
+    
     import sys
     
     # 現在時刻（JST）
@@ -609,7 +646,7 @@ async def analyze(request: Request, analyze_req: AnalyzeRequest):
 
     # 2. システムプロンプトの準備
     # フロントエンドから渡されたカスタムプロンプトを使用します。
-    system_prompt = request.system_prompt
+    system_prompt = analyze_req.system_prompt
     if not system_prompt:
         system_prompt = "You are a helpful assistant." # 万が一のためのデフォルト
 

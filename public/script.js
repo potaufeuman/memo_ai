@@ -1,7 +1,7 @@
 
 // --- デバッグモード設定 (Debug Mode) ---
 // 本番環境では false に設定してください
-const DEBUG_MODE = true;
+const DEBUG_MODE = false;
 
 // デバッグログ用ヘルパー関数
 function debugLog(...args) {
