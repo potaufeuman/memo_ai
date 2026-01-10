@@ -535,6 +535,146 @@ function compressImage(file, maxDimension = 600, quality = 0.7) {
     });
 }
 
+/**
+ * Capture photo from camera using getUserMedia API (for desktop)
+ * Creates a temporary modal with live camera preview and capture button
+ */
+async function capturePhotoFromCamera() {
+    return new Promise(async (resolve, reject) => {
+        let stream = null;
+        
+        try {
+            // Request camera access
+            updateState('📷', 'カメラへのアクセスを要求中...', { step: 'requesting_camera' });
+            stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: 'user' },
+                audio: false 
+            });
+            
+            // Create modal with video preview
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.style.display = 'flex';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 600px;">
+                    <div class="modal-header">
+                        <h2>📷 カメラ</h2>
+                        <button class="close-btn" id="closeCameraModal">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <video id="cameraPreview" autoplay playsinline style="width: 100%; border-radius: 8px; background: black;"></video>
+                        <canvas id="cameraCanvas" style="display: none;"></canvas>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn-secondary" id="cancelCamera">キャンセル</button>
+                        <button class="btn-primary" id="capturePhoto">📸 撮影</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            const video = document.getElementById('cameraPreview');
+            const canvas = document.getElementById('cameraCanvas');
+            const captureBtn = document.getElementById('capturePhoto');
+            const cancelBtn = document.getElementById('cancelCamera');
+            const closeBtn = document.getElementById('closeCameraModal');
+            
+            // Start video stream
+            video.srcObject = stream;
+            
+            updateState('✅', 'カメラ準備完了', { step: 'camera_ready' });
+            
+            const cleanup = () => {
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                }
+                document.body.removeChild(modal);
+                const stateDisplay = document.getElementById('stateDisplay');
+                if (stateDisplay) stateDisplay.classList.add('hidden');
+            };
+            
+            // Capture button handler
+            captureBtn.addEventListener('click', async () => {
+                try {
+                    updateState('📸', '写真を撮影中...', { step: 'capturing' });
+                    
+                    // Set canvas dimensions to match video
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    
+                    // Draw current frame to canvas
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(video, 0, 0);
+                    
+                    // Convert to blob and compress
+                    canvas.toBlob(async (blob) => {
+                        try {
+                            // Convert blob to file
+                            const file = new File([blob], 'camera-photo.jpg', { type: 'image/jpeg' });
+                            
+                            // Compress the image
+                            const { base64, mimeType } = await compressImage(file);
+                            
+                            // Set preview
+                            setPreviewImage(base64, mimeType);
+                            
+                            cleanup();
+                            updateState('✅', '写真を保存しました', { step: 'saved' });
+                            showToast("写真を撮影しました");
+                            setTimeout(() => {
+                                const stateDisplay = document.getElementById('stateDisplay');
+                                if (stateDisplay) stateDisplay.classList.add('hidden');
+                            }, 2000);
+                            
+                            resolve();
+                        } catch (err) {
+                            cleanup();
+                            reject(err);
+                        }
+                    }, 'image/jpeg', 0.9);
+                    
+                } catch (err) {
+                    cleanup();
+                    reject(err);
+                }
+            });
+            
+            // Cancel/Close handlers
+            const handleCancel = () => {
+                cleanup();
+                resolve(); // Not an error, just cancelled
+            };
+            
+            cancelBtn.addEventListener('click', handleCancel);
+            closeBtn.addEventListener('click', handleCancel);
+            
+        } catch (err) {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            
+            // Translate common errors
+            let errorMsg = err.message;
+            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                errorMsg = 'カメラへのアクセスが拒否されました';
+            } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+                errorMsg = 'カメラが見つかりませんでした';
+            } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+                errorMsg = 'カメラは別のアプリケーションで使用中です';
+            }
+            
+            updateState('❌', 'カメラアクセスに失敗', { step: 'error', error: errorMsg });
+            setTimeout(() => {
+                const stateDisplay = document.getElementById('stateDisplay');
+                if (stateDisplay) stateDisplay.classList.add('hidden');
+            }, 3000);
+            
+            reject(new Error(errorMsg));
+        }
+    });
+}
+
 function readFileAsBase64(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();

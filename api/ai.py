@@ -440,8 +440,13 @@ Restraints:
         print(f"[Chat AI] Raw parsed response type: {type(data)}")
         print(f"[Chat AI] Raw parsed response: {data}")
         
+        # 文字列が返ってきた場合の対応（LLMがJSON形式を返さなかった場合）
+        if isinstance(data, str):
+            print(f"[Chat AI] Response is a string, wrapping in message dict")
+            data = {"message": data}
+        
         # リスト形式で返ってきた場合の対応（一部のモデルの挙動）
-        if isinstance(data, list):
+        elif isinstance(data, list):
             print(f"[Chat AI] Response is a list, extracting first element")
             if data and isinstance(data[0], dict):
                 data = data[0]
@@ -451,8 +456,8 @@ Restraints:
         if not data:
             data = {"message": "AIから有効な応答が得られませんでした。"}
             
-        print(f"[Chat AI] After list handling: {data}")
-        print(f"[Chat AI] Message field: {data.get('message')}")
+        print(f"[Chat AI] After type handling: {data}")
+        print(f"[Chat AI] Message field: {data.get('message') if isinstance(data, dict) else 'N/A'}")
         
     except json.JSONDecodeError:
         print(f"[Chat AI] JSON decode failed, attempting recovery from: {json_resp[:200]}")
