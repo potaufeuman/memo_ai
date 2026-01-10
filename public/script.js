@@ -980,6 +980,9 @@ async function handleChatAI() {
         });
         
         // 4. APIリクエスト
+        updateState('📡', 'サーバーに送信中...', { step: 'uploading' });
+        showAITypingIndicator(); // AI応答待ちインジケーターを表示
+        
         const res = await fetch('/api/chat', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -995,6 +998,9 @@ async function handleChatAI() {
         }
         
         const data = await res.json();
+        
+        // AI応答受信後、インジケーターを非表示
+        hideAITypingIndicator();
         
         // コスト情報の更新
         if (data.cost) {
@@ -1031,6 +1037,7 @@ async function handleChatAI() {
         
     } catch(e) {
         console.error('[handleChatAI] Error:', e);
+        hideAITypingIndicator(); // エラー時もインジケーターを非表示
         updateState('❌', 'Error', { error: e.message });
         addChatMessage('system', "エラー: " + e.message);
         showToast("エラー: " + e.message);
@@ -1045,6 +1052,35 @@ function handleSessionClear() {
     renderChatHistory();
     localStorage.removeItem(CHAT_HISTORY_KEY);
     showToast("セッションをクリアしました");
+}
+
+// --- AI応答待ちインジケーター制御 ---
+
+/**
+ * AI応答待ちインジケーターを表示
+ */
+function showAITypingIndicator() {
+    const indicator = document.getElementById('aiTypingIndicator');
+    if (indicator) {
+        indicator.classList.remove('hidden');
+        // チャット履歴の最下部にスクロール
+        const chatHistory = document.getElementById('chatHistory');
+        if (chatHistory) {
+            setTimeout(() => {
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+            }, 50);
+        }
+    }
+}
+
+/**
+ * AI応答待ちインジケーターを非表示
+ */
+function hideAITypingIndicator() {
+    const indicator = document.getElementById('aiTypingIndicator');
+    if (indicator) {
+        indicator.classList.add('hidden');
+    }
 }
 
 // --- バブルからの追加機能 ---
