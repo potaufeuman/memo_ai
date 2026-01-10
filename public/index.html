@@ -55,7 +55,16 @@
                 <span class="menu-icon">💰</span>
                 <span>推定コスト: <span id="sessionCost">$0.0000</span></span>
             </div>
+
+            <!-- ⚠️ 本番環境では以下を削除 -->
+            <div class="menu-divider"></div>
+            <button id="debugInfoMenuItem" class="menu-item debug-menu-item">
+                <span class="menu-icon">🔍</span>
+                <span>デバッグ情報</span>
+            </button>
+            <!-- ⚠️ ここまで削除（本番環境では） -->
         </div>
+
 
         <!-- Debug Information Panel -->
         <!-- Debug panel removed for production -->
@@ -209,6 +218,29 @@
                     </div>
                 </div>
             </div>
+
+            <!-- ⚠️ 本番環境では削除: デバッグ情報モーダル -->
+            <div id="debugModal" class="modal hidden">
+                <div class="modal-content modal-wide">
+                    <div class="modal-header">
+                        <h2>🔍 デバッグ情報</h2>
+                        <button id="closeDebugModalBtn" class="close-btn">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="debugInfoContent" class="debug-info-content">
+                            <div class="loading-indicator">
+                                <div class="spinner"></div>
+                                <span>読み込み中...</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="refreshDebugBtn" class="btn-secondary">🔄 再読み込み</button>
+                        <button id="closeDebugBtn" class="btn-primary">閉じる</button>
+                    </div>
+                </div>
+            </div>
+            <!-- ⚠️ ここまで削除（本番環境では） -->
 
             <!-- ページ内容全画面モーダル -->
             <div id="contentModal" class="modal hidden">

@@ -285,97 +285,167 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // 11. Debug Panel
-    loadDebugInfo();
-    const toggleDebugBtn = document.getElementById('toggleDebugBtn');
-    if (toggleDebugBtn) {
-        toggleDebugBtn.addEventListener('click', () => {
-            const debugPanel = document.getElementById('debugPanel');
-            const isHidden = debugPanel.classList.contains('hidden');
-            if (isHidden) {
-                debugPanel.classList.remove('hidden');
-                toggleDebugBtn.textContent = '非表示';
-            } else {
-                debugPanel.classList.add('hidden');
-                toggleDebugBtn.textContent = '表示';
-            }
+    // ⚠️ 本番環境では削除: デバッグメニュー
+    const debugInfoItem = document.getElementById('debugInfoMenuItem');
+    if (debugInfoItem) {
+        debugInfoItem.addEventListener('click', () => {
+            settingsMenu.classList.add('hidden');
+            openDebugModal();
         });
     }
+    
+    const closeDebugModalBtn = document.getElementById('closeDebugModalBtn');
+    const closeDebugBtn = document.getElementById('closeDebugBtn');
+    const refreshDebugBtn = document.getElementById('refreshDebugBtn');
+    if (closeDebugModalBtn) closeDebugModalBtn.addEventListener('click', closeDebugModal);
+    if (closeDebugBtn) closeDebugBtn.addEventListener('click', closeDebugModal);
+    if (refreshDebugBtn) refreshDebugBtn.addEventListener('click', loadDebugInfo);
 });
 
-// === Debug Information ===
+// ⚠️ 本番環境では削除: デバッグモーダル関連関数
+
+/**
+ * デバッグモーダルを開く
+ */
+function openDebugModal() {
+    const modal = document.getElementById('debugModal');
+    modal.classList.remove('hidden');
+    loadDebugInfo();
+}
+
+/**
+ * デバッグモーダルを閉じる
+ */
+function closeDebugModal() {
+    const modal = document.getElementById('debugModal');
+    modal.classList.add('hidden');
+}
+
+/**
+ * デバッグ情報を読み込んで表示
+ */
 async function loadDebugInfo() {
-    const debugContent = document.getElementById('debugContent');
-    if (!debugContent) return;
+    const content = document.getElementById('debugInfoContent');
+    if (!content) return;
+    
+    content.innerHTML = '<div class="loading-indicator"><div class="spinner"></div><span>読み込み中...</span></div>';
     
     try {
-        const res = await fetch('/api/debug');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const res = await fetch('/api/debug5075378');
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
         
         const data = await res.json();
-        
-        let html = '';
-        
-        // Environment
-        html += '<div class="debug-section"><h4>⚙️ Environment</h4>';
-        Object.entries(data.environment).forEach(([key, value]) => {
-            html += `<div class="debug-item"><span class="debug-key">${key}:</span><span class="debug-value">${value}</span></div>`;
-        });
-        html += '</div>';
-        
-        // Paths
-        html += '<div class="debug-section"><h4>📁 Paths</h4>';
-        Object.entries(data.paths).forEach(([key, value]) => {
-            const displayValue = Array.isArray(value) ? value.join(', ') : value;
-            html += `<div class="debug-item"><span class="debug-key">${key}:</span><span class="debug-value">${displayValue}</span></div>`;
-        });
-        html += '</div>';
-        
-        // Filesystem Checks
-        html += '<div class="debug-section"><h4>🗂️ Filesystem Checks</h4>';
-        Object.entries(data.filesystem_checks).forEach(([path, info]) => {
-            const existsClass = info.exists ? 'debug-true' : 'debug-false';
-            html += `<div class="debug-item">`;
-            html += `<span class="debug-key">${path}:</span>`;
-            html += `<span class="${existsClass}">${info.exists ? '✅ EXISTS' : '❌ NOT FOUND'}</span>`;
-            if (info.exists) {
-                if (info.is_file) html += ` | File (${info.size} bytes)`;
-                if (info.is_dir && info.contents) html += ` | Dir: [${info.contents.join(', ')}]`;
-            }
-            html += `</div>`;
-        });
-        html += '</div>';
-        
-        // CWD Contents
-        html += '<div class="debug-section"><h4>📂 Current Directory Contents</h4>';
-        if (Array.isArray(data.cwd_contents)) {
-            html += `<div class="debug-item">${data.cwd_contents.join(', ')}</div>`;
-        } else {
-            html += `<div class="debug-item">${data.cwd_contents}</div>`;
-        }
-        html += '</div>';
-        
-        // Static File Mount
-        html += '<div class="debug-section"><h4>🚀 Static File Mount</h4>';
-        html += `<div class="debug-item">${data.static_file_mount}</div>`;
-        html += '</div>';
-        
-        // App Routes
-html += '<div class="debug-section"><h4>🛣️ Registered Routes (First 10)</h4>';
-        data.app_routes.slice(0, 10).forEach(route => {
-            html += `<div class="debug-item">`;
-            html += `<span class="debug-key">${route.path}:</span>`;
-            html += `<span class="debug-value">${route.methods.join(', ') || 'ANY'} (${route.name})</span>`;
-            html += `</div>`;
-        });
-        html += '</div>';
-        
-        debugContent.innerHTML = html;
-        
+        renderDebugInfo(data);
     } catch (err) {
-        debugContent.innerHTML = `<div style="color: #e57373;">Failed to load debug info: ${err.message}</div>`;
+        content.innerHTML = `
+            <div class="debug-error">
+                <h3>❌ デバッグ情報の取得に失敗</h3>
+                <p>${err.message}</p>
+                <p class="debug-hint">
+                    💡 ヒント: サーバーが起動しているか確認してください
+                </p>
+            </div>
+        `;
     }
 }
+
+
+/**
+ * デバッグ情報をHTMLとしてレンダリング
+ */
+function renderDebugInfo(data) {
+    const content = document.getElementById('debugInfoContent');
+    if (!content) return;
+    
+    let html = '';
+    
+    // タイムスタンプ
+    html += `<div class="debug-timestamp">取得時刻: ${data.timestamp || 'N/A'}</div>`;
+    
+    // 環境情報
+    html += '<div class="debug-section">';
+    html += '<h3>⚙️ 環境情報</h3>';
+    html += '<div class="debug-grid">';
+    for (const [key, value] of Object.entries(data.environment || {})) {
+        html += `
+            <div class="debug-item">
+                <span class="debug-label">${key}:</span>
+                <span class="debug-value">${value}</span>
+            </div>
+        `;
+    }
+    html += '</div></div>';
+    
+    // パス情報
+    html += '<div class="debug-section">';
+    html += '<h3>📁 パス情報</h3>';
+    html += '<div class="debug-grid">';
+    for (const [key, value] of Object.entries(data.paths || {})) {
+        html += `
+            <div class="debug-item">
+                <span class="debug-label">${key}:</span>
+                <code class="debug-path">${value}</code>
+            </div>
+        `;
+    }
+    html += '</div></div>';
+    
+    // ファイルシステム
+    html += '<div class="debug-section">';
+    html += '<h3>🗂️ ファイルシステム</h3>';
+    html += '<div class="debug-list">';
+    for (const [path, info] of Object.entries(data.filesystem_checks || {})) {
+        const status = info.exists ? '✅' : '❌';
+        const statusClass = info.exists ? 'exists' : 'missing';
+        html += `
+            <div class="debug-fs-item ${statusClass}">
+                <div class="debug-fs-header">
+                    <span class="debug-fs-status">${status}</span>
+                    <code class="debug-fs-path">${path}</code>
+                </div>
+                ${info.exists ? `<div class="debug-fs-details">${info.is_dir ? 'ディレクトリ' : `ファイル (${info.size} bytes)`}</div>` : ''}
+            </div>
+        `;
+    }
+    html += '</div></div>';
+    
+    // 環境変数（マスク済み）
+    if (data.env_vars) {
+        html += '<div class="debug-section">';
+        html += '<h3>🔐 環境変数（マスク済み）</h3>';
+        html += '<div class="debug-grid">';
+        for (const [key, value] of Object.entries(data.env_vars)) {
+            html += `
+                <div class="debug-item">
+                    <span class="debug-label">${key}:</span>
+                    <code class="debug-value">${value || 'null'}</code>
+                </div>
+            `;
+        }
+        html += '</div></div>';
+    }
+    
+    // ルート情報
+    html += '<div class="debug-section">';
+    html += '<h3>🛣️ 登録ルート</h3>';
+    html += '<div class="debug-routes">';
+    (data.routes || []).forEach(route => {
+        html += `
+            <div class="debug-route-item">
+                <code class="debug-route-path">${route.path}</code>
+                <span class="debug-route-methods">${route.methods.join(', ')}</span>
+                <span class="debug-route-name">${route.name}</span>
+            </div>
+        `;
+    });
+    html += '</div></div>';
+    
+    content.innerHTML = html;
+}
+
+// ⚠️ ここまで削除（本番環境では）
 
 // --- Image Utility ---
 

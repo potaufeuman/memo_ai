@@ -233,11 +233,114 @@ def health_check():
     return {"status": "ok"}
 
 
-# Debug endpoint removed for production
-# Uncomment if needed for troubleshooting
-# @app.get("/api/debug")
-# async def debug_info():
-#     ...
+# ⚠️⚠️⚠️ 警告: 本番環境では必ずこのセクションを削除またはコメントアウトしてください ⚠️⚠️⚠️
+# このエンドポイントはサーバーの内部情報を公開するため、セキュリティリスクがあります
+# 
+# 削除方法:
+#   1. このブロック全体（ここから「ここまで削除」コメントまで）を削除またはコメントアウト
+#   2. フロントエンドの設定メニューからデバッグメニューアイテムも削除（public/index.html, public/script.js, public/style.css）
+#
+# デバッグエンドポイント（開発用のみ）
+@app.get("/api/debug5075378")
+async def debug_info():
+    """
+    デバッグ情報取得エンドポイント（開発専用）
+    
+    環境変数、ファイルパス、ルート情報などを返します。
+    この情報はトラブルシューティングに役立ちますが、本番環境では公開すべきではありません。
+    """
+    import sys
+    
+    # 現在時刻（JST）
+    from datetime import datetime
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        from backports.zoneinfo import ZoneInfo
+    
+    jst = ZoneInfo("Asia/Tokyo")
+    now = datetime.now(jst)
+    timestamp = now.strftime("%Y-%m-%dT%H:%M:%S%z")
+    
+    # 環境情報
+    is_vercel = bool(os.environ.get("VERCEL"))
+    environment = {
+        "is_vercel": is_vercel,
+        "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        "host": "0.0.0.0" if not is_vercel else "Vercel"
+    }
+    
+    # パス情報
+    paths = {
+        "cwd": os.getcwd(),
+        "static_dir": "public",
+        "api_dir": "api"
+    }
+    
+    # ファイルシステムチェック
+    filesystem_checks = {}
+    check_paths = ["public", ".env", "README.md", "requirements.txt", "api"]
+    
+    for path in check_paths:
+        full_path = os.path.join(os.getcwd(), path)
+        exists = os.path.exists(full_path)
+        info = {"exists": exists}
+        
+        if exists:
+            info["is_file"] = os.path.isfile(full_path)
+            info["is_dir"] = os.path.isdir(full_path)
+            
+            if info["is_file"]:
+                info["size"] = os.path.getsize(full_path)
+            elif info["is_dir"]:
+                try:
+                    contents = os.listdir(full_path)
+                    info["contents"] = contents[:10]  # 最初の10個のみ
+                except:
+                    pass
+        
+        filesystem_checks[path] = info
+    
+    # 環境変数（マスク済み）
+    env_vars = {}
+    important_vars = ["NOTION_API_KEY", "NOTION_ROOT_PAGE_ID", "GEMINI_API_KEY", "PORT"]
+    
+    for var in important_vars:
+        value = os.environ.get(var)
+        if value:
+            # APIキーなどは一部のみ表示
+            if "KEY" in var or "SECRET" in var:
+                masked = f"{value[:8]}...{value[-4:]}" if len(value) > 12 else "***masked***"
+                env_vars[var] = masked
+            elif "ID" in var:
+                # IDは最初の8文字のみ表示
+                masked = f"{value[:8]}..." if len(value) > 8 else value
+                env_vars[var] = masked
+            else:
+                env_vars[var] = value
+        else:
+            env_vars[var] = None
+    
+    # 登録ルート情報
+    routes = []
+    for route in app.routes:
+        route_info = {
+            "path": route.path,
+            "name": route.name,
+            "methods": list(route.methods) if hasattr(route, 'methods') else []
+        }
+        routes.append(route_info)
+    
+    return {
+        "timestamp": timestamp,
+        "environment": environment,
+        "paths": paths,
+        "filesystem_checks": filesystem_checks,
+        "env_vars": env_vars,
+        "routes": routes[:20]  # 最初の20個のみ
+    }
+
+# ⚠️⚠️⚠️ ここまで削除（本番環境では） ⚠️⚠️⚠️
 
 
 @app.get("/api/config")
