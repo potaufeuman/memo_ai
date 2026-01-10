@@ -25,7 +25,10 @@ async def generate_json(
     リトライロジックとコスト計算が含まれています。
     
     Args:
-        prompt: テキストプロンプト または マルチモーダルコンテンツのリスト
+        prompt: 以下のいずれかの形式:
+               - str: 単純なテキストプロンプト
+               - list[dict]: マルチモーダルコンテンツパーツ (例: [{"type": "text", ...}, {"type": "image_url", ...}])
+               - list[dict] with 'role' key: 会話履歴を含むメッセージ配列 (例: [{"role": "system", "content": ...}, {"role": "user", "content": ...}])
         model: 使用するモデルID (例: "gemini/gemini-2.0-flash-exp")
         retries: 失敗時の最大リトライ回数 (Noneの場合は設定値を使用)
     
@@ -47,8 +50,13 @@ async def generate_json(
         try:
             # メッセージの準備
             if isinstance(prompt, list):
-                # マルチモーダル入力: コンテンツパーツのリスト
-                messages = [{"role": "user", "content": prompt}]
+                # リストの場合: 会話履歴 または マルチモーダルコンテンツ
+                if len(prompt) > 0 and isinstance(prompt[0], dict) and 'role' in prompt[0]:
+                    # 会話履歴形式: [{"role": "system", "content": ...}, {"role": "user", "content": ...}]
+                    messages = prompt
+                else:
+                    # マルチモーダル入力: [{"type": "text", ...}, {"type": "image_url", ...}]
+                    messages = [{"role": "user", "content": prompt}]
             else:
                 # テキストのみ: 単純な文字列
                 messages = [{"role": "user", "content": prompt}]

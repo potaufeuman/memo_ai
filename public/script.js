@@ -92,9 +92,24 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // カメラ/ギャラリー起動ボタン
-        if (cameraBtn) cameraBtn.addEventListener('click', () => {
-            cameraInput.click();
+        if (cameraBtn) cameraBtn.addEventListener('click', async () => {
             mediaMenu.classList.add('hidden');
+            
+            // デバイス判定: モバイルならcapture属性、デスクトップならgetUserMedia
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            
+            if (isMobile) {
+                // モバイル: 既存の実装（capture属性を使用）
+                cameraInput.click();
+            } else {
+                // デスクトップ: getUserMedia APIを使用
+                try {
+                    await capturePhotoFromCamera();
+                } catch (err) {
+                    console.error('[Camera] Error:', err);
+                    showToast("カメラへのアクセスに失敗しました: " + err.message);
+                }
+            }
         });
         
         if (galleryBtn) galleryBtn.addEventListener('click', () => {
@@ -673,10 +688,20 @@ function loadChatHistory() {
             // Rebuild chatSession for API context
             chatSession = chatHistory
                 .filter(entry => ['user', 'ai'].includes(entry.type))
-                .map(entry => ({
-                    role: entry.type === 'user' ? 'user' : 'assistant',
-                    content: entry.message.replace(/<br>/g, '\n') // Restore newlines for context
-                }));
+                .map(entry => {
+                    let content = entry.message;
+                    
+                    // 画像タグを削除して、テキストと[画像送信]のみを保持
+                    // 例: "テキスト<br>[画像送信]<img...>" -> "テキスト [画像送信]"
+                    content = content.replace(/\u003cimg[^>]*>/g, ''); // imgタグを削除
+                    content = content.replace(/\u003cbr\u003e/g, ' '); // <br>をスペースに置換
+                    content = content.trim(); // 余分な空白を削除
+                    
+                    return {
+                        role: entry.type === 'user' ? 'user' : 'assistant',
+                        content: content
+                    };
+                });
             
             // If the last message was from user and we are reloading, 
             // we might want to ensure we don't double-send or anything, 
@@ -736,9 +761,6 @@ async function handleChatAI() {
     
     addChatMessage('user', displayMessage);
     
-    // AIへのコンテキスト用にはテキストのみを追加（画像は別途送信）
-    if (text) chatSession.push({role: 'user', content: text});
-    
     // 重要: 送信データを一時変数にコピーしてからステートをクリアする
     // これにより、非同期処理中にユーザーが次の操作を行っても影響を受けません。
     const imageToSend = currentImageBase64;
@@ -746,12 +768,27 @@ async function handleChatAI() {
     
     console.log('[handleChatAI] Image data copied:', imageToSend ? `${imageToSend.length} chars` : 'null');
     
+    // 2. 会話履歴の準備（現在のメッセージを追加する前に取得）
+    // AIに送信する履歴には、現在のメッセージを含めず、直近10件のみを送信します。
+    const historyToSend = chatSession.slice(-10);
+    console.log('[handleChatAI] Sending conversation history:', historyToSend.length, 'messages');
+    
+    // 3. AIへのコンテキスト用にメッセージを追加
+    // 画像がある場合は、テキストと[画像送信]の両方を含めて履歴に記録します。
+    let contextMessage = text || '';
+    if (imageToSend) {
+        contextMessage = contextMessage ? `${contextMessage} [画像送信]` : '[画像送信]';
+    }
+    if (contextMessage) {
+        chatSession.push({role: 'user', content: contextMessage});
+    }
+    
     // 入力欄とプレビューのクリア
     memoInput.value = '';
     memoInput.dispatchEvent(new Event('input'));
     clearPreviewImage();
     
-    // 2. 使用するAIモデルの決定
+    // 4. 使用するAIモデルの決定
     // ユーザーが明示的に選択していない場合、画像ありならVisionモデル、なしならテキストモデルを自動選択します。
     const hasImage = !!imageToSend;
     let modelToUse = currentModel;
@@ -765,7 +802,7 @@ async function handleChatAI() {
         ? `[${modelInfo.provider}] ${modelInfo.name}`
         : (modelToUse || 'Auto');
 
-    // 3. 処理状態の更新 (State Indication)
+    // 5. 処理状態の更新 (State Indication)
     updateState('🔄', `AI分析中... (${modelDisplay})`, {
         model: modelToUse,
         hasImage: hasImage,
@@ -788,7 +825,7 @@ async function handleChatAI() {
             text: text,
             target_id: currentTargetId,
             system_prompt: systemPrompt,
-            session_history: chatSession.slice(0, -1).slice(-10), // 直近10件のみ送信
+            session_history: historyToSend, // 現在のメッセージを含まない、直近10件の履歴
             reference_context: referenceContext,
             image_data: imageToSend,
             image_mime_type: mimeToSend,

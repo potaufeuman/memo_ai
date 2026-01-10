@@ -371,25 +371,64 @@ async def chat_analyze_text_with_ai(
     selected_model = select_model_for_input(has_image=has_image, user_selection=model)
     print(f"[Chat AI] Selected model: {selected_model}")
     
-    # プロンプト構築
-    print(f"[Chat AI] Constructing prompt, schema keys: {len(schema)}, history length: {len(session_history) if session_history else 0}")
-    prompt_text = construct_chat_prompt(text or "", schema, system_prompt, session_history)
+    # 会話履歴の準備
+    print(f"[Chat AI] Constructing messages, schema keys: {len(schema)}, history length: {len(session_history) if session_history else 0}")
     
-    # 画像がある場合の追加指示
-    if has_image:
-        prompt_text += "\n\n[IMPORTANT: The user has attached an image. Please analyze the image content and respond based on what you see in the image.]"
+    # スキーマ情報の整形
+    schema_info = {}
+    for k, v in schema.items():
+        if isinstance(v, dict) and "type" in v:
+             schema_info[k] = v['type']
+             if v['type'] == 'select' and 'select' in v:
+                schema_info[k] += f" options: {[o['name'] for o in v['select']['options']]}"
+             elif v['type'] == 'multi_select' and 'multi_select' in v:
+                schema_info[k] += f" options: {[o['name'] for o in v['multi_select']['options']]}"
     
-    # マルチモーダルプロンプトの準備
-    print(f"[Chat AI] Preparing {'multimodal' if has_image else 'text-only'} prompt")
+    # システムプロンプトの構築
+    system_message_content = f"""{system_prompt}
+
+Target Schema:
+{json.dumps(schema_info, indent=2, ensure_ascii=False)}
+
+Restraints:
+- You are a helpful AI assistant.
+- Your output must be valid JSON ONLY.
+- Structure:
+{{
+  "message": "Response to the user",
+  "refined_text": "Refined version of the input, if applicable (or null)",
+  "properties": {{ "Property Name": "Value" }} // Only if user intends to save data
+}}
+- If the user is just chatting, "properties" should be null.
+- If the user wants to save/add data, fill "properties" according to the Schema."""
+    
+    # メッセージ配列の構築
+    messages = [{"role": "system", "content": system_message_content}]
+    
+    # 会話履歴を追加（画像データは含まれない、テキストのみ）
+    if session_history:
+        messages.extend(session_history)
+    
+    # 現在のユーザー入力を追加
     if has_image:
-        # 画像データを含む特殊なプロンプト構造を作成
-        prompt = prepare_multimodal_prompt(prompt_text, image_data, image_mime_type)
+        #マルチモーダル: 画像データを含むコンテンツパーツを作成
+        print(f"[Chat AI] Preparing multimodal message with image")
+        current_user_content = prepare_multimodal_prompt(
+            text or "(No text provided)",
+            image_data,
+            image_mime_type
+        )
+        messages.append({"role": "user", "content": current_user_content})
     else:
-        prompt = prompt_text
+        # テキストのみ
+        if text:
+            messages.append({"role": "user", "content": text})
+        else:
+            messages.append({"role": "user", "content": "(No text provided)"})
     
-    # LLMの呼び出し
-    print(f"[Chat AI] Calling LLM: {selected_model}")
-    result = await generate_json(prompt, model=selected_model)
+    # LLMの呼び出し（messages配列を渡す）
+    print(f"[Chat AI] Calling LLM: {selected_model} with {len(messages)} messages")
+    result = await generate_json(messages, model=selected_model)
     print(f"[Chat AI] LLM response received, length: {len(result['content'])}")
     json_resp = result["content"]
     
